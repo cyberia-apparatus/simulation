@@ -1,0 +1,21 @@
+[package]
+name = "simulation"
+version = "0.1.0"
+edition = "2021"
+description = "closed-loop emergence simulator — tests crystal/emergence.md: emergence requires a closed feedback loop, not just scale"
+license = "LicenseRef-CYBER"
+repository = "https://github.com/cyberia-to/simulation"
+keywords = ["emergence", "cybergraph", "simulation", "scaling"]
+
+[dependencies]
+# the hot kernels run on honeycrisp where a NEON/AMX op exists; the
+# trait keeps a scalar fallback so the science runs on any machine.
+acpu = { path = "../honeycrisp/acpu" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[[example]]
+name = "bench_kernels"
+path = "examples/bench_kernels.rs"

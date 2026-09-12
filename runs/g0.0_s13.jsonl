@@ -1,0 +1,25 @@
+{"event": 56, "n": 8, "edges": 56, "phase": "start", "g": 0, "q": 0.5}
+{"event": 8000, "n": 4051, "edges": 8000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.1037, "sigma1": 0.6027, "sigma_ratio": 43.16, "compile_s": 0.32, "wall_s": 0.3}
+{"event": 16000, "n": 8060, "edges": 16000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0934, "sigma1": 0.3649, "sigma_ratio": 38.92, "compile_s": 0.72, "wall_s": 1.1}
+{"event": 24000, "n": 12083, "edges": 24000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0906, "sigma1": 0.2619, "sigma_ratio": 24.14, "compile_s": 1.21, "wall_s": 2.3}
+{"event": 32000, "n": 16086, "edges": 32000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0883, "sigma1": 0.2288, "sigma_ratio": 29.45, "compile_s": 1.45, "wall_s": 3.9}
+{"event": 40000, "n": 20117, "edges": 40000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0754, "sigma1": 0.2115, "sigma_ratio": 16.82, "compile_s": 4.04, "wall_s": 8.0}
+{"event": 48000, "n": 24122, "edges": 48000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0817, "sigma1": 0.1880, "sigma_ratio": 31.90, "compile_s": 2.40, "wall_s": 10.4}
+{"event": 56000, "n": 28168, "edges": 56000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0776, "sigma1": 0.1701, "sigma_ratio": 16.39, "compile_s": 2.97, "wall_s": 13.5}
+{"event": 64000, "n": 32088, "edges": 64000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0739, "sigma1": 0.1539, "sigma_ratio": 35.89, "compile_s": 3.63, "wall_s": 17.3}
+{"event": 72000, "n": 36103, "edges": 72000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0717, "sigma1": 0.1459, "sigma_ratio": 19.33, "compile_s": 3.75, "wall_s": 21.1}
+{"event": 80000, "n": 40086, "edges": 80000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0766, "sigma1": 0.1351, "sigma_ratio": 14.85, "compile_s": 3.84, "wall_s": 25.1}
+{"event": 88000, "n": 44070, "edges": 88000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0726, "sigma1": 0.1229, "sigma_ratio": 27.63, "compile_s": 4.19, "wall_s": 29.4}
+{"event": 96000, "n": 48109, "edges": 96000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0714, "sigma1": 0.1030, "sigma_ratio": 16.71, "compile_s": 4.63, "wall_s": 34.1}
+{"event": 104000, "n": 52117, "edges": 104000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0682, "sigma1": 0.0896, "sigma_ratio": 9.42, "compile_s": 5.04, "wall_s": 39.3}
+{"event": 112000, "n": 56057, "edges": 112000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0689, "sigma1": 0.0861, "sigma_ratio": 12.77, "compile_s": 5.46, "wall_s": 44.9}
+{"event": 120000, "n": 60000, "edges": 120000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0792, "sigma1": 0.0829, "sigma_ratio": 12.89, "compile_s": 5.67, "wall_s": 50.7}
+{"event": 128000, "n": 60000, "edges": 128000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0663, "sigma1": 0.0801, "sigma_ratio": 27.41, "compile_s": 5.83, "wall_s": 56.7}
+{"event": 136000, "n": 60000, "edges": 136000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0667, "sigma1": 0.0947, "sigma_ratio": 18.37, "compile_s": 5.89, "wall_s": 62.7}
+{"event": 144000, "n": 60000, "edges": 144000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0756, "sigma1": 0.1080, "sigma_ratio": 21.55, "compile_s": 5.97, "wall_s": 68.8}
+{"event": 152000, "n": 60000, "edges": 152000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0771, "sigma1": 0.1097, "sigma_ratio": 9.75, "compile_s": 6.02, "wall_s": 75.0}
+{"event": 160000, "n": 60000, "edges": 160000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0790, "sigma1": 0.1129, "sigma_ratio": 11.22, "compile_s": 5.93, "wall_s": 81.1}
+{"event": 164001, "n": 60000, "edges": 164001, "unseen": 0.1607, "unseen_n": 15998, "seen": 0.0783, "sigma1": 0.1116, "sigma_ratio": 25.66, "compile_s": 5.93, "wall_s": 98.6}
+{"event": 172000, "n": 60000, "edges": 172000, "unseen": 0.1504, "unseen_n": 7999, "seen": 0.0580, "sigma1": 0.1043, "sigma_ratio": 19.99, "compile_s": 5.74, "wall_s": 110.4}
+{"event": 180000, "n": 60000, "edges": 180000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0791, "sigma1": 0.1133, "sigma_ratio": 11.36, "compile_s": 6.42, "wall_s": 117.0}
+{"event": 180000, "n": 60000, "edges": 180000, "unseen": 0.0000, "unseen_n": 0, "seen": 0.0791, "phase": "final", "wall_s": 117.1}
