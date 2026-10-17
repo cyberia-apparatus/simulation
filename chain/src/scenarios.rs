@@ -279,7 +279,7 @@ pub fn run(name: &str, ctx: &Ctx) -> Run {
         "reorg-140-checkpoints" => reorg(ctx, name, 140, true, t0),
         "eclipse" => eclipse(ctx, name, 40 * MIN, 30 * MIN, t0),
         "eclipse-long" => eclipse(ctx, name, 40 * MIN, 2 * HOUR + 30 * MIN, t0),
-        "flood" => flood(ctx, name, 20 * MIN, t0),
+        "flood" => flood(ctx, name, 10 * MIN, t0),
         "flood-long" => flood(ctx, name, 2 * HOUR, t0),
         "hostile" => hostile(ctx, name, 9, t0),
         "forged-header-storm" => hostile(ctx, name, 130, t0),
