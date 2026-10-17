@@ -89,6 +89,8 @@ pub struct Stats {
 
 pub struct Config {
     pub genesis: Arc<Vec<u8>>,
+    /// hemera(genesis bytes), computed once (bostrom's file is 330 MB)
+    pub chain_id: Id,
     pub opts: OpenOptions,
     pub clock: EpochClock,
     pub supply0: u64,

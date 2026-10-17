@@ -84,6 +84,7 @@ pub fn run(ctx: &Ctx, chain: &str, t0: Instant) -> Run {
     let bname = backend.name();
     let cfg = Arc::new(Config {
         genesis: Arc::new(genesis.bytes.clone()),
+        chain_id: genesis.chain_id,
         opts: OpenOptions { checkpoints: true, clock: None, engine: Some(Arc::new(Tru::new(4))), quadrature: 0, inline_settlement: false },
         clock: EpochClock::SPEC,
         supply0: genesis.s0(),

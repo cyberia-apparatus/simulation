@@ -27,7 +27,7 @@ pub fn signed(chain: &Id, body: Body, key: &mudra::SigningKey) -> Vec<u8> {
 }
 
 pub fn chain_id(w: &World) -> Id {
-    soft3::chain::net::codec::hash(&w.cfg.genesis)
+    w.cfg.chain_id
 }
 
 pub fn native() -> Id {
