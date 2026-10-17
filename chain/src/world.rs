@@ -107,6 +107,8 @@ pub struct World {
     pub allow_honest_bans: bool,
     /// the hostile nodes of the run (their bans are the point)
     pub hostile_ix: Vec<usize>,
+    /// grinds a valid nonce for real difficulty (the launch suite); `None` = the scalar loop
+    pub grinder: Option<Box<dyn Fn(&mut Header) -> u64>>,
 }
 
 impl World {
@@ -140,6 +142,7 @@ impl World {
             notes: Vec::new(),
             allow_honest_bans: false,
             hostile_ix: Vec::new(),
+            grinder: None,
         }
     }
 
@@ -251,6 +254,10 @@ impl World {
 
     pub fn add_miner(&mut self, name: &str, node: usize, rate_mhs: u64, strategy: Strategy) -> usize {
         let to = *hemera::hash(format!("miner/{name}").as_bytes()).as_bytes();
+        self.add_miner_to(name, node, rate_mhs, strategy, to)
+    }
+
+    pub fn add_miner_to(&mut self, name: &str, node: usize, rate_mhs: u64, strategy: Strategy, to: Id) -> usize {
         let ix = self.miners.len();
         self.miners.push(Miner { name: name.into(), node, to, rate_mhs, gen: 0, strategy, found: 0, hashes: 0, ground_us: 0 });
         self.reschedule(ix);
@@ -315,6 +322,7 @@ impl World {
         }
         let to = self.miners[m].to;
         let n = &mut self.nodes[node];
+        let next_height = n.tip().height + 1;
         let txs = n.mempool.template_txs();
         let now = n.now();
         let t0 = Instant::now();
@@ -322,7 +330,7 @@ impl World {
         let tpl = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| chain.template(&to, &txs, now))) {
             Ok(t) => t,
             Err(_) => {
-                n.stats.panics.push(format!("template at {}", n.tip().height + 1));
+                n.stats.panics.push(format!("template at {next_height}"));
                 n.crash();
                 self.crashed_by_panic(node);
                 return;
@@ -337,7 +345,10 @@ impl World {
             }
         };
         let t1 = Instant::now();
-        let hashes = Self::grind(&mut header);
+        let hashes = match &self.grinder {
+            Some(g) => g(&mut header),
+            None => Self::grind(&mut header),
+        };
         self.miners[m].ground_us += t1.elapsed().as_micros() as u64;
         self.miners[m].hashes += hashes;
         self.hash_budget += hashes;
@@ -647,6 +658,24 @@ impl World {
     /// Stop mining and agents, let the network settle, and check that every
     /// honest online node holds the same tip and the same state.
     pub fn quiesce(&mut self, ms: u64) {
+        // equal-work tips stay split under first-seen until the next block:
+        // one honest miner breaks the tie, then everything stops
+        let breaker = (0..self.miners.len()).find(|m| self.miners[*m].strategy == Strategy::Honest && self.nodes[self.miners[*m].node].online && self.nodes[self.miners[*m].node].role == Role::Honest && !self.expect_split.contains(&self.miners[*m].node));
+        for m in 0..self.miners.len() {
+            if Some(m) != breaker {
+                self.miners[m].rate_mhs = 0;
+                self.miners[m].gen += 1;
+            }
+        }
+        if let Some(b) = breaker {
+            let start = self.miners[b].found;
+            let mut guard = 0;
+            while self.miners[b].found < start + 2 && guard < 200 {
+                let t = self.now + 30 * SEC;
+                self.run_until(t);
+                guard += 1;
+            }
+        }
         self.mining = false;
         for m in 0..self.miners.len() {
             self.miners[m].gen += 1;

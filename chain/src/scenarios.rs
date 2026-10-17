@@ -186,18 +186,32 @@ fn finish(w: &mut World, quiesce: u64) {
     let mut apply_max = 0u64;
     let mut apply_all: Vec<u64> = Vec::new();
     let mut tpl_max = 0;
+    let mut upkeep_max = 0u64;
     let mut honest_bans = Vec::new();
     let honest: Vec<usize> = w.nodes.iter().filter(|n| n.role == Role::Honest).map(|n| n.ix).collect();
     let attackers: Vec<usize> = w.nodes.iter().filter(|n| n.role != Role::Honest).map(|n| n.ix).collect();
+    let hostile: Vec<usize> = attackers.iter().chain(w.hostile_ix.iter()).chain(w.expect_split.iter()).copied().collect();
+    let mut charges: std::collections::BTreeMap<String, u64> = Default::default();
+    for n in w.nodes.iter().filter(|n| n.role == Role::Honest) {
+        for (k, v) in &n.stats.charges {
+            *charges.entry(k.clone()).or_default() += v;
+        }
+    }
+    w.metrics.emit(serde_json::json!({"kind": "charges", "by_honest_nodes": charges}));
     for n in &w.nodes {
         conservation.extend(n.stats.conservation_failures.iter().cloned());
         panics.extend(n.stats.panics.iter().cloned());
         apply_max = apply_max.max(n.stats.apply_us_max);
         apply_all.extend(n.stats.apply_us.iter().copied());
         tpl_max = tpl_max.max(n.stats.template_us_max);
-        for (t, p) in &n.stats.bans {
-            if honest.contains(p) && !attackers.contains(p) && !w.hostile_ix.contains(p) {
-                honest_bans.push(format!("{} banned {} at {} s", n.name, w.nodes[*p].name, t / 1000));
+        upkeep_max = upkeep_max.max(n.stats.upkeep_us_max);
+        if hostile.contains(&n.ix) || n.role != Role::Honest {
+            continue;
+        }
+        for (k, (t, p)) in n.stats.bans.iter().enumerate() {
+            if honest.contains(p) && !hostile.contains(p) {
+                let why = n.stats.ban_reasons.get(k).cloned().unwrap_or_default();
+                honest_bans.push(format!("{} banned {} at {} s ({why})", n.name, w.nodes[*p].name, t / 1000));
             }
         }
     }
@@ -210,6 +224,7 @@ fn finish(w: &mut World, quiesce: u64) {
     if !w.allow_honest_bans {
         w.checks.expect("no honest peer banned", honest_bans.is_empty(), if honest_bans.is_empty() { "none".into() } else { honest_bans[..honest_bans.len().min(4)].join("; ") });
     }
+    w.checks.expect("resource: mempool upkeep per tip move ≤ 2 s", upkeep_max <= 2_000_000, format!("max {} ms (remove mined + re-admit the pool)", upkeep_max / 1000));
     let rss = crate::world::rss_mb();
     w.checks.info("resource: peak RSS", &format!("{rss} MB (process)"));
     let mempool_max = w.nodes.iter().map(|n| n.stats.mempool_max).max().unwrap_or(0);
@@ -262,8 +277,8 @@ pub fn run(name: &str, ctx: &Ctx) -> Run {
         "reorg-60" => reorg(ctx, name, 60, false, t0),
         "reorg-140" => reorg(ctx, name, 140, false, t0),
         "reorg-140-checkpoints" => reorg(ctx, name, 140, true, t0),
-        "eclipse" => eclipse(ctx, name, 40 * MIN, 2 * HOUR + 30 * MIN, t0),
-        "eclipse-long" => eclipse(ctx, name, 40 * MIN, 6 * HOUR, t0),
+        "eclipse" => eclipse(ctx, name, 40 * MIN, 30 * MIN, t0),
+        "eclipse-long" => eclipse(ctx, name, 40 * MIN, 2 * HOUR + 30 * MIN, t0),
         "flood" => flood(ctx, name, 20 * MIN, t0),
         "flood-long" => flood(ctx, name, 2 * HOUR, t0),
         "hostile" => hostile(ctx, name, 9, t0),
@@ -438,8 +453,10 @@ fn clock_skew(ctx: &Ctx, name: &str, t0: Instant) -> Run {
 fn asert_step(ctx: &Ctx, name: &str, factor: u64, t0: Instant) -> Run {
     let mut t = testnet(ctx, name, NetSpec { nodes: 6, miners: vec![1_000_000], ..Default::default() });
     let base = t.base_rate;
+    // ×f for 90 min, back to base; then ÷f from base for 150 min, back to base
     let (up, down, end) = (60 * MIN, 4 * HOUR, 9 * HOUR);
     t.w.at(up, move |w| w.set_rate(0, base * factor));
+    t.w.at(up + 90 * MIN, move |w| w.set_rate(0, base));
     t.w.at(down, move |w| w.set_rate(0, base / factor));
     t.w.at(down + 2 * HOUR + 30 * MIN, move |w| w.set_rate(0, base));
     t.w.stall_ms = 6 * HOUR;
@@ -457,14 +474,16 @@ fn asert_step(ctx: &Ctx, name: &str, factor: u64, t0: Instant) -> Run {
         }
         u64::MAX
     };
-    let r_up = recovery(&t.w, up, down);
+    let r_up = recovery(&t.w, up, up + 90 * MIN);
     let r_down = recovery(&t.w, down, down + 2 * HOUR + 30 * MIN);
     // analytic: ASERT halves the target per 600 s of schedule error; a ×f step
     // needs log2(f) half-lives of *excess* blocks to absorb
     t.w.checks.expect(&format!("ASERT ×{factor} spike: interval back to 30 s ± 20 %"), r_up < 3 * 3600, format!("{} s after the step", r_up));
     t.w.checks.expect(&format!("ASERT ÷{factor} collapse: interval back to 30 s ± 20 %"), r_down < 3 * 3600, format!("{} s after the step", r_down));
-    let (_, _, max_gap, _) = intervals(&t.w, obs, down, down + 2 * HOUR);
-    t.w.checks.info(&format!("ASERT ÷{factor}: longest block gap after the collapse"), &format!("{} s", max_gap / 1000));
+    // the first block after a collapse is mined at the old target (ASERT reads the parent only): ≈ f × 30 s
+    let first_after = t.w.main_chain(obs).iter().filter_map(|(_, _, f)| f.map(|x| x.0)).find(|x| *x >= down).map(|x| (x - down) / 1000);
+    let (_, _, max_gap, _) = intervals(&t.w, obs, down.saturating_sub(10 * MIN), down + 2 * HOUR);
+    t.w.checks.info(&format!("ASERT ÷{factor}: first block after the collapse, longest gap"), &format!("first block {} s after the step (expected ≈ {} s), longest gap {} s", first_after.unwrap_or(0), factor * 30, max_gap / 1000));
     interval_check(&mut t.w, obs, down + 2 * HOUR + 30 * MIN + 30 * MIN, end, 22 * SEC, 38 * SEC, "liveness: steady again after the steps");
     finish(&mut t.w, 5 * MIN);
     done(t.w, name, t0)
@@ -518,6 +537,10 @@ fn reorg(ctx: &Ctx, name: &str, depth: u64, checkpoints: bool, t0: Instant) -> R
         w.link(late, 0, LinkSpec::WAN);
         w.link(late, atk, LinkSpec::WAN);
         w.start_node(late);
+        if depth > 119 {
+            // which chain it follows is the question, not a safety violation of the honest set
+            w.expect_split = vec![atk, late];
+        }
     });
     t.w.stall_ms = 40 * MIN;
     t.w.run_until(end);
@@ -568,6 +591,7 @@ fn eclipse(ctx: &Ctx, name: &str, start: u64, len: u64, t0: Instant) -> Run {
         w.add_miner("eclipser", atk, rate, Strategy::Honest);
         w.expect_split = vec![victim, atk];
     });
+    let long = len > HOUR;
     t.w.at(start + len, move |w| {
         w.unlink(victim, atk);
         for p in w.net.all_links_of(victim) {
@@ -579,7 +603,8 @@ fn eclipse(ctx: &Ctx, name: &str, start: u64, len: u64, t0: Instant) -> Run {
         }
         w.nodes[victim].sync_pass(None);
         w.flush(victim);
-        w.expect_split = vec![atk];
+        // a branch ≥ 120 deep cannot be undone (chain.md §5.2): the victim stays apart
+        w.expect_split = if long { vec![atk, victim] } else { vec![atk] };
     });
     let end = start + len + 40 * MIN;
     t.w.stall_ms = 2 * HOUR;
@@ -592,8 +617,10 @@ fn eclipse(ctx: &Ctx, name: &str, start: u64, len: u64, t0: Instant) -> Run {
     if atk_blocks <= 119 {
         t.w.checks.expect("eclipse: victim recovers when the fake branch is < 120 deep", recovered, ev);
     } else {
-        // spec: a reorg beyond 119 is never taken; the operator must resync
-        t.w.checks.add("eclipse: a cheap fake branch ≥ 120 deep strands the victim", if recovered { Status::Pass } else { Status::Fail }, ev);
+        // chain.md §5.2: a reorg beyond 119 is never taken; the operator resyncs.
+        // A finding for the owner (the eclipser needs almost no hashrate), run as expected red.
+        t.w.checks.expected_red.push("eclipse > 1 h: the victim rejoins without an operator".into());
+        t.w.checks.add("eclipse > 1 h: the victim rejoins without an operator", if recovered { Status::Pass } else { Status::Fail }, ev);
         if !recovered {
             t.w.expect_split = vec![atk, victim];
         }
@@ -689,10 +716,11 @@ fn economy(ctx: &Ctx, name: &str, epochs: u64, t0: Instant) -> Run {
         let (p, q) = if i % 2 == 0 { (rng.range(10, 49), rng.range(10, 49)) } else { (rng.range(1, 6), rng.range(10, 49)) };
         let q = if p == q { q + 1 } else { q };
         let v = [1i8, 1, 0, -1][rng.below(4) as usize];
-        pos.push(mk(&format!("honest{i}"), 10 + i, p, q, v, big / 4 + rng.below(big), 1 + rng.below(epochs.min(4))));
+        pos.push(mk(&format!("honest{i}"), 10 + i, p, q, v, big / 4 + rng.below(big), 1 + rng.below(3)));
     }
+    // epochs 1–3 carry every strategy; epoch 5 is left quiet for the recycler's relock
     // concentration: every epoch more stake on the dominant edge
-    for e in 1..=epochs.min(6) {
+    for e in 1..=3 {
         pos.push(mk(&format!("concentrate{e}"), 30 + e as usize, 1, 2, 1, big, e));
     }
     // recycler: lock, unlock at MIN_LOCK, relock the same side

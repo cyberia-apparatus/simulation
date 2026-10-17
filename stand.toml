@@ -1,0 +1,120 @@
+# The stand the chain simulator builds on: soft3 (tracking main) and the
+# sibling revisions soft3 main is built and tested against. soft3's crate
+# reaches its siblings by relative path (../../<name>), so the stand is a
+# directory holding all of them side by side with this repository.
+#
+# Source of the revisions: soft3 audit/chain/economy-2026-10-17.md § stand
+# (the stand that built soft3 main d7a407e). Several siblings still require
+# cyber-hemera "0.3" on their default branches while soft3 needs 0.4; the
+# [[bump]] entries are the same one-line stand-local edits the economy
+# receipt records (its open item). When the hemera-0.4 sweep lands on the
+# default branches, delete the bumps and move the revisions to the
+# soft3/release/phase1.toml pins.
+#
+# `python3 scripts/stand.py --into DIR` builds it (CI); a local task wrapper
+# (~/cyber/<repo>/.worktrees/<task>/) holds the same layout.
+
+[soft3]
+url = "https://github.com/cyberia-to/soft3"
+rev = "main"
+
+[[sibling]]
+name = "bbg"
+url = "https://github.com/cyberia-to/bbg"
+rev = "be5c5db91c369c0e5cee2f60e402fc65ae93a40d"
+
+[[sibling]]
+name = "cybergraph"
+url = "https://github.com/cyberia-to/cybergraph"
+rev = "4c73149bb5f0698c70c2d847df57b3e5ac7ab056"
+
+[[sibling]]
+name = "file"
+url = "https://github.com/cyberia-to/file"
+rev = "ae9a57d743ac0ee1a00cab6e0e10abb3ca109799"
+
+[[sibling]]
+name = "foculus"
+url = "https://github.com/cyberia-to/foculus"
+rev = "b28f0a2663ec4448327ef4e45983a0f64c9f4fcb"
+
+[[sibling]]
+name = "hemera"
+url = "https://github.com/cyberia-to/hemera"
+rev = "7237a23afad38913a143da48010f3912f50d7684"
+
+[[sibling]]
+name = "honeycrisp"
+url = "https://github.com/cyberia-to/honeycrisp"
+rev = "40861c764a6f6ca6b6b27693d893b3ec099a91db"
+
+[[sibling]]
+name = "inf"
+url = "https://github.com/cyberia-to/inf"
+rev = "3a2c3f520da0c7c2ef78c602fd5493a35e04db87"
+
+[[sibling]]
+name = "joy"
+url = "https://github.com/cyberia-to/joy"
+rev = "10844a890e2939d529a1003474298a09be30b75c"
+
+[[sibling]]
+name = "lens"
+url = "https://github.com/cyberia-to/lens"
+rev = "529adcb22636dacba76c73db19fa1512228546b7"
+
+[[sibling]]
+name = "mudra"
+url = "https://github.com/cyberia-to/mudra"
+rev = "6a53ed394966144730f1547b045e4ae948c9290d"
+
+[[sibling]]
+name = "neuron"
+url = "https://github.com/cyberia-to/neuron"
+rev = "9df467d4112a5004994b747202844ca49f25e59a"
+
+[[sibling]]
+name = "nox"
+url = "https://github.com/cyberia-to/nox"
+rev = "12adaf886edc3f942d10b10a30b39b6d942405af"
+
+[[sibling]]
+name = "radio"
+url = "https://github.com/cyberia-to/radio"
+rev = "949fad7ce9298a765d8d23ca2d2af2979bc7871c"
+
+[[sibling]]
+name = "strata"
+url = "https://github.com/cyberia-to/strata"
+rev = "12a7a6df7f69329d6b075b08abf0af7b8d4282a0"
+
+[[sibling]]
+name = "tade"
+url = "https://github.com/cyberia-to/tade"
+rev = "778dc6f7fa1bf1176d436a27686e8393c8f81db7"
+
+[[sibling]]
+name = "tok"
+url = "https://github.com/cyberia-to/plumb"
+rev = "c773592d1734f2f2acc4fe4f1c041c8c5a52976e"
+
+[[sibling]]
+name = "trident"
+url = "https://github.com/cyberia-to/trident"
+rev = "f96d0b5eb760272cfab54531d737a087cb9a28ba"
+
+[[sibling]]
+name = "tru"
+url = "https://github.com/cyberia-to/tru"
+rev = "e660d1e1f1b8908fc1b22e511ebe94b6514b685b"
+
+[[sibling]]
+name = "zheng"
+url = "https://github.com/cyberia-to/zheng"
+rev = "8f20262cb9313416be20460203f4c69025ad9ef3"
+
+[[bump]]
+# cyber-hemera "0.3" → "0.4" (soft3 depends on hemera 0.4; one package in the graph)
+from = '((?:hemera|cyber-hemera)\s*=\s*\{[^\n]*?version = ")0\.3(?:\.\d+)?(")'
+to = '\g<1>0.4\g<2>'
+files = ["bbg/rs/Cargo.toml", "cybergraph/Cargo.toml", "foculus/Cargo.toml", "mudra/Cargo.toml", "nox/rs/Cargo.toml", "tok/rs/Cargo.toml", "tru/rs/Cargo.toml", "zheng/rs/Cargo.toml", "zheng/cli/Cargo.toml"]

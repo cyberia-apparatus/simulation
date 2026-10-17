@@ -183,7 +183,9 @@ pub fn analyze(w: &mut World, accounts: &[Account], positions: &[Position], leng
         let m = paid_to("recycle");
         let first = m.get(&rec.epoch).copied().unwrap_or(0);
         let later: u64 = m.iter().filter(|(e, _)| **e > rec.epoch).map(|(_, a)| *a).sum();
-        let ev = format!("first lock paid {first}, relock paid {later} (epochs {:?})", m);
+        // which relock epochs were quiet (the recycler the only position adding stake)?
+        let quiet: Vec<u64> = m.keys().copied().filter(|e| *e > rec.epoch).filter(|e| recs.iter().find(|r| r.epoch == *e).is_some_and(|r| r.payouts.len() == 1)).collect();
+        let ev = format!("first lock paid {first}, relock paid {later} (by epoch {:?}; relock the only earner in epochs {:?})", m, quiet);
         w.checks.add("economy §9: recycler earns ≤ the mark's decay", if later <= first / 50 { Status::Pass } else { Status::Fail }, ev);
     }
     // hedger: equal +1 / −1 on one axon leave A unchanged and must earn nothing

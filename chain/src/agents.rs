@@ -79,8 +79,11 @@ impl Agent for Traffic {
         if nodes.is_empty() || self.accounts.is_empty() {
             return Some(self.every_ms);
         }
-        let node = nodes[self.rng.below(nodes.len() as u64) as usize];
-        let a = &self.accounts[self.rng.below(self.accounts.len() as u64) as usize];
+        // a wallet talks to one node (its home); another only while the home is down
+        let k = self.rng.below(self.accounts.len() as u64) as usize;
+        let home = self.nodes[k % self.nodes.len()];
+        let node = if nodes.contains(&home) { home } else { nodes[self.rng.below(nodes.len() as u64) as usize] };
+        let a = &self.accounts[k];
         let nonce = next_nonce(w, node, &a.neuron);
         let chain = chain_id(w);
         let body = if self.rng.below(3) == 0 {
@@ -341,14 +344,16 @@ impl Agent for Hostile {
     fn finish(&mut self, w: &mut World) {
         let targets = w.net.all_links_of(self.node);
         let banned: Vec<usize> = targets.iter().copied().filter(|t| w.nodes[*t].stats.bans.iter().any(|(_, p)| *p == self.node)).collect();
-        let scored: u64 = targets.iter().map(|t| w.nodes[*t].peers.get(&self.node).map(|p| p.score as u64).unwrap_or(100)).sum();
-        // what each kind must cost the sender (chain-wire §5)
-        let must_ban = !matches!(self.kind, Junk::DoubleClaim);
-        let ok = if must_ban { banned.len() == targets.len() } else { true };
+        // what each kind must cost the sender (chain-wire §5): replays of mined
+        // transactions are stale (refused, never scored — honest relays race
+        // blocks); everything else bans
+        let stale = matches!(self.kind, Junk::Replay | Junk::DoubleClaim);
+        let ok = if stale { banned.is_empty() } else { banned.len() == targets.len() };
+        let rule = if stale { "refused, not scored" } else { "banned by every target" };
         w.checks.expect(
-            &format!("hostile {:?}: scored / banned", self.kind),
+            &format!("hostile {:?}: {rule}", self.kind),
             ok,
-            format!("{} messages; banned by {}/{} targets; residual score {}", self.sent, banned.len(), targets.len(), scored),
+            format!("{} messages sent; banned by {}/{} targets", self.sent, banned.len(), targets.len()),
         );
     }
 }
@@ -583,6 +588,10 @@ impl Agent for Stakers {
                 if !submit(w, self.node, &tx) {
                     let why = w.nodes[self.node].submit_tx(&tx).err().map(|e| e.to_string()).unwrap_or_default();
                     self.log.push(format!("{}: refused: {why}", pos.label));
+                    // retry the stage on the next action
+                    self.positions[i].done = pos.done;
+                    self.positions[i].epoch = pos.epoch;
+                    break;
                 }
             }
         }

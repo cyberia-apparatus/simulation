@@ -71,10 +71,14 @@ pub struct Stats {
     pub apply_us_sum: u64,
     pub apply_us: Vec<u64>,
     pub template_us_max: u64,
+    /// mempool upkeep after a tip move (remove mined, re-admit everything)
+    pub upkeep_us_max: u64,
+    pub upkeep_us_sum: u64,
     pub mempool_max: usize,
     pub mempool_bytes_max: usize,
     pub charges: BTreeMap<String, u64>,
     pub bans: Vec<(u64, usize)>,
+    pub ban_reasons: Vec<String>,
     pub held: u64,
     pub settle_waits: u64,
     pub settle_wait_ms: u64,
@@ -235,7 +239,9 @@ impl SimNode {
         if points == 0 {
             return;
         }
-        *self.stats.charges.entry(why.split(':').next().unwrap_or(why).to_string()).or_default() += points as u64;
+        // the reason without its numbers: "tx: nonce 20 outside [3, 3 + 16)" → "tx: nonce outside"
+        let key: String = why.split(|c: char| c.is_ascii_digit() || c == '[' || c == '(').next().unwrap_or(why).trim().to_string();
+        *self.stats.charges.entry(key).or_default() += points as u64;
         let now = self.now_ms;
         let banned = match self.peers.get_mut(&peer) {
             Some(p) => {
@@ -250,6 +256,7 @@ impl SimNode {
             self.peers.remove(&peer);
             self.banned.insert(peer, self.now_ms + BAN_MS);
             self.stats.bans.push((self.now_ms, peer));
+            self.stats.ban_reasons.push(why.to_string());
         }
     }
 
@@ -358,6 +365,7 @@ impl SimNode {
             self.stats.reorgs.push((self.now_ms, reorged.len() as u64));
         }
         let now = self.now();
+        let t_upkeep = Instant::now();
         // mempool upkeep for every block that joined the main chain
         let mut fork = before.height.min(after.height);
         while fork > 0 && chain.header_at(fork).map(|h| h.id()) != self.ancestor_id(&before.id, fork) {
@@ -372,6 +380,9 @@ impl SimNode {
             }
         }
         self.mempool.revalidate(chain, &reorged, now);
+        let up = t_upkeep.elapsed().as_micros() as u64;
+        self.stats.upkeep_us_max = self.stats.upkeep_us_max.max(up);
+        self.stats.upkeep_us_sum += up;
         self.stats.applied += after.height.saturating_sub(fork);
         if !chain.conserved() || chain.supply(&chain.native_token()) != self.cfg.supply0 + after.height * self.cfg.subsidy {
             self.stats.conservation_failures.push(format!("{} at height {} ({})", self.name, after.height, hex4(&after.id)));
@@ -422,9 +433,24 @@ impl SimNode {
 
     // ── receiving ───────────────────────────────────────────────────
 
+    fn trace(&self, what: &str) {
+        if std::env::var("SIM_TRACE").is_ok_and(|v| v == self.name) {
+            let t = self.chain.as_ref().map(|c| c.tip().height).unwrap_or(0);
+            eprintln!("    {} t={}s tip={t}: {what}", self.name, self.now_ms / 1000);
+        }
+    }
+
     pub fn on_wire(&mut self, from: usize, wire: Wire) {
         if !self.online {
             return;
+        }
+        if std::env::var("SIM_TRACE").is_ok_and(|v| v == self.name) {
+            let kind = match &wire {
+                Wire::Gossip(b) => format!("gossip {}B", b.len()),
+                Wire::Req(id, _) => format!("req {id}"),
+                Wire::Resp(id, f) => format!("resp {id} ({} frames)", f.len()),
+            };
+            self.trace(&format!("from {from}: {kind}"));
         }
         if !self.peers.contains_key(&from) {
             // a message from a peer we dropped (ban, eclipse): ignore
@@ -467,7 +493,9 @@ impl SimNode {
     fn on_header(&mut self, from: usize, header: Header) {
         let id = header.id();
         let now = self.now();
-        match self.chain().accept_header(&header, now) {
+        let verdict = self.chain().accept_header(&header, now);
+        self.trace(&format!("header {} from {from}: {verdict:?}", header.height));
+        match verdict {
             Ok(HeaderVerdict::Accepted) => {
                 self.foreign_best = self.foreign_best.max(header.height);
                 if self.role == Role::Honest {
@@ -511,7 +539,12 @@ impl SimNode {
                 }
             }
             Err(AdmitError::Known) if self.recently_relayed(&id) => {}
-            Err(e) => self.charge(from, e.score(), &format!("tx: {e}")),
+            Err(e) => {
+                // the wire's own rule (`net::mempool::relay_charge`, chain-wire §5)
+                let peer_height = self.peers.get(&from).map(|p| p.best_height).unwrap_or(0);
+                let points = soft3::chain::net::mempool::relay_charge(&e, peer_height, self.tip().height);
+                self.charge(from, points, &format!("tx: {e}"));
+            }
         }
     }
 
@@ -726,7 +759,9 @@ impl SimNode {
 
     /// `gossip::apply_fetched`: a block from its announcer; ancestors on demand.
     fn apply_fetched(&mut self, from: usize, header: Header, body: Vec<u8>) {
-        match self.accept_block(from, &header, &body) {
+        let v = self.accept_block(from, &header, &body);
+        self.trace(&format!("block {} from {from}: {v:?}", header.height));
+        match v {
             Ok(BlockVerdict::NewTip) | Ok(BlockVerdict::Stored) | Ok(BlockVerdict::Known) => {}
             Ok(BlockVerdict::NeedBodies(ids)) => {
                 let want: Vec<(u64, Id)> = ids
@@ -833,7 +868,7 @@ impl SimNode {
 
     /// `sync::pass`: held headers, status of the peers ahead (all, every third tick), bodies.
     pub fn sync_pass(&mut self, preferred: Option<usize>) {
-        if !self.online || self.role == Role::Silent {
+        if !self.online {
             return;
         }
         let now = self.now();

@@ -1,5 +1,10 @@
 # simulation
 
+two simulators: the closed-loop emergence simulator (`simulation
+emergence …`, the historical `simulation --flags`, everything up to §
+doctrine) and the network + economy simulator of the cyber phase-1 chain
+(`simulation chain …`, § chain).
+
 closed-loop emergence simulator. tests the hypothesis recorded in
 [[crystal/emergence.md]]: **emergence requires a closed feedback loop,
 not just scale**. the tru scale ladder (tru/eval/scale_ladder.md)
@@ -108,6 +113,74 @@ the graph); the curve then decays as the reserved edges materialize.
 - deterministic: seeded xorshift; same flags -> same JSONL.
 - honest metrics: probes are reserved BEFORE the run starts; unseen
   links never enter training or compilation.
-- ASCII-only, no external crates.
+- ASCII-only, no external crates (the emergence simulator; `chain/` depends on soft3).
+
+
+## chain — the network + economy simulator of the phase-1 chain
+
+`simulation chain <gate|nightly|launch|scenario…>` (or the standalone
+`simulation-chain` binary of `chain/`, which builds where acpu does not).
+It answers the launch question — does the network take off, does it hang,
+is it secure — by running the **real soft3 kernel** in many nodes at once:
+
+- **nodes**: N in-process nodes, each the kernel behind the wire's port
+  (`soft3::chain::net::kernel::KernelChain`, its fjall store on disk), the
+  real mempool (`net::mempool`), real chain-wire frames encoded and decoded
+  by `net::frames`, and the protocol of `net/gossip.rs`, `net/sync.rs`,
+  `net/serve.rs` re-expressed as event handlers: header-first gossip and
+  relay, body fetch from the announcer, header sync by locator, ranged body
+  download, the orphan and future-drift holds, peer scoring with decay and
+  bans. Not real: QUIC streams (a request/response pair), the iroh-gossip
+  mesh (broadcast to links), the wall-clock token buckets, discovery.
+- **network**: per-link latency, jitter, loss and bandwidth (a
+  serialization queue per direction), partitions and heals, links taken
+  down (eclipse, crash), late joiners doing initial block download, nodes
+  crashed and reopened from disk (the kernel replays), per-node clock skew.
+- **clock**: a discrete-event loop on a virtual clock (ms); every tie
+  broken by insertion order, every map ordered, the exponential sampler
+  integer-only — a seed reproduces a run bit for bit (`determinism`).
+- **mining oracle**: each miner finds its next block after an exponential
+  time of mean `work(target) / hashrate`; the block is then *really*
+  ground — a nonce whose hemera id meets the ASERT target — and goes
+  through the same validation as every other block. Test networks use a
+  2^248 genesis target (≈ 256 hashes a block) with the `sim` feature's
+  relaxed `POW_LIMIT` (2^255); ASERT is scale-invariant, so its dynamics
+  are the launch's. The `launch` suite uses the real genesis files at the
+  real 2^232 target and grinds every block for real (Metal with
+  `--features metal`, else every CPU core).
+- **agents**: honest traffic, a flood at the fee floor, hostile peers
+  (junk frames, oversize, bad signatures, replays, cross-chain replays,
+  claim abuse, bodies on gossip, bad-work headers, wrong-chain status),
+  a forger of valid-work blocks with broken bodies, selfish (SM1) and
+  private-fork miners, an eclipser, and the economy's strategies
+  (diverse stakers, concentration, recycler, hedger, Sybil splitter,
+  self-linking ring, last-block copy, −1 griefer, payout-owner change).
+- **invariants**, sampled continuously and at the end: liveness (block
+  interval against 30 s, no stall), safety (honest nodes agree below depth
+  120, convergence after quiesce, no reorg beyond 119), conservation at
+  every block on every node, determinism (same seed, and every node's epoch
+  records equal), resources (apply time, mempool upkeep, mempool capacity,
+  RSS), the economy bounds of soft3 specs/chain-economy.md §5–§9
+  recomputed from the chain (Δs per card, the 1 % cap, `P ≤ B = ⌊F/4⌋`).
+  Known open findings run as **expected red**: a green there means the
+  finding was fixed.
+
+Suites: `gate` (≤ 10 min on an M4 Max; CI on Linux on every push, every
+soft3 merge and every six hours; the soft3 release train's
+`simulation-gate`), `nightly` (hours: larger N, longer horizons, the
+stronger adversaries), `launch` (the genesis day of pussy and bostrom).
+`simulation chain --list` prints them. Output: one JSONL file per scenario
+and a markdown verdict table (scenario · invariant · verdict · evidence).
+
+```bash
+# a stand: soft3 + the sibling revisions it builds against (stand.toml)
+python3 scripts/stand.py --into /tmp/stand && cd /tmp/stand/simulation
+cargo build --profile sim -p simulation-chain
+./target/sim/simulation-chain gate --out /tmp/sim-out --md /tmp/sim-out/verdict.md
+cargo build --profile sim -p simulation-chain --features metal   # macOS, for `launch`
+./target/sim/simulation-chain launch --out /tmp/sim-out
+```
+
+Receipts: `audit/network-2026-10.md`.
 
 license: cyber license — don't trust. don't fear. don't beg.
