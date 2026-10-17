@@ -257,12 +257,13 @@ impl Agent for Hostile {
             Junk::OversizeGossip => gossip = Some(Frame::Tx(vec![7u8; 5_000]).encode()),
             Junk::BadSignature => {
                 let nonce = w.nodes[self.node].chain().nonce(&self.donor.neuron);
-                let mut tx = signed(&chain, Body::Transfer { from: self.donor.neuron, nonce, token: native(), amount: 1, to: [3; 32], fee: 300 }, &self.donor.key);
+                // every message distinct: iroh-gossip drops repeats before the application
+                let mut tx = signed(&chain, Body::Transfer { from: self.donor.neuron, nonce, token: native(), amount: self.sent, to: [3; 32], fee: 300 }, &self.donor.key);
                 let i = tx.len() - 5;
                 tx[i] ^= 0x40;
                 gossip = Some(Frame::Tx(tx).encode());
             }
-            Junk::OversizeTx => gossip = Some(Frame::Tx(vec![1u8; 600]).encode()),
+            Junk::OversizeTx => gossip = Some(Frame::Tx(vec![self.sent as u8; 600]).encode()),
             Junk::Replay => {
                 // a transaction already on the main chain
                 let n = &w.nodes[self.node];
@@ -281,13 +282,13 @@ impl Agent for Hostile {
             Junk::CrossChain => {
                 let other = [0xee; 32];
                 let nonce = w.nodes[self.node].chain().nonce(&self.donor.neuron);
-                let tx = signed(&other, Body::Transfer { from: self.donor.neuron, nonce, token: native(), amount: 1, to: [3; 32], fee: 300 }, &self.donor.key);
+                let tx = signed(&other, Body::Transfer { from: self.donor.neuron, nonce, token: native(), amount: self.sent, to: [3; 32], fee: 300 }, &self.donor.key);
                 gossip = Some(Frame::Tx(tx).encode());
             }
             Junk::ClaimWrongKey => {
                 if let Some(l) = &self.legacy {
                     // the donor's key claiming a legacy account it does not own
-                    let tx = signed(&chain, Body::Claim { account_id: l.account_id, nonce: 0, fee: 300 }, &self.donor.key);
+                    let tx = signed(&chain, Body::Claim { account_id: l.account_id, nonce: 0, fee: 300 + self.sent }, &self.donor.key);
                     gossip = Some(Frame::Tx(tx).encode());
                 }
             }
