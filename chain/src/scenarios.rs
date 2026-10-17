@@ -465,12 +465,16 @@ fn asert_step(ctx: &Ctx, name: &str, factor: u64, t0: Instant) -> Run {
     let mut t = testnet(ctx, name, NetSpec { nodes: 6, miners: vec![1_000_000], ..Default::default() });
     let base = t.base_rate;
     // ×f for 90 min, back to base; then ÷f from base for 150 min, back to base
-    let (up, down, end) = (60 * MIN, 4 * HOUR, 9 * HOUR);
+    // the first block after a ÷f collapse is exponential with mean f·30 s:
+    // the collapse window covers its 99th percentile (≈ 4.6 · f · 30 s) plus recovery
+    let low = (factor * 30 * SEC * 46 / 10 + 90 * MIN).max(2 * HOUR + 30 * MIN);
+    let (up, down) = (60 * MIN, 4 * HOUR);
+    let end = down + low + 2 * HOUR + 30 * MIN;
     t.w.at(up, move |w| w.set_rate(0, base * factor));
     t.w.at(up + 90 * MIN, move |w| w.set_rate(0, base));
     t.w.at(down, move |w| w.set_rate(0, base / factor));
-    t.w.at(down + 2 * HOUR + 30 * MIN, move |w| w.set_rate(0, base));
-    t.w.stall_ms = 6 * HOUR;
+    t.w.at(down + low, move |w| w.set_rate(0, base));
+    t.w.stall_ms = low + HOUR;
     t.w.run_until(end);
     let obs = 1;
     let recovery = |w: &World, from: u64, to: u64| -> u64 {
@@ -486,16 +490,19 @@ fn asert_step(ctx: &Ctx, name: &str, factor: u64, t0: Instant) -> Run {
         u64::MAX
     };
     let r_up = recovery(&t.w, up, up + 90 * MIN);
-    let r_down = recovery(&t.w, down, down + 2 * HOUR + 30 * MIN);
+    let r_down = recovery(&t.w, down, down + low);
     // analytic: ASERT halves the target per 600 s of schedule error; a ×f step
     // needs log2(f) half-lives of *excess* blocks to absorb
     t.w.checks.expect(&format!("ASERT ×{factor} spike: interval back to 30 s ± 20 %"), r_up < 3 * 3600, format!("{} s after the step", r_up));
-    t.w.checks.expect(&format!("ASERT ÷{factor} collapse: interval back to 30 s ± 20 %"), r_down < 3 * 3600, format!("{} s after the step", r_down));
+    t.w.checks.expect(&format!("ASERT ÷{factor} collapse: interval back to 30 s ± 20 %"), r_down * 1000 < low, format!("{} s after the step (window {} s)", r_down, low / 1000));
     // the first block after a collapse is mined at the old target (ASERT reads the parent only): ≈ f × 30 s
     let first_after = t.w.main_chain(obs).iter().filter_map(|(_, _, f)| f.map(|x| x.0)).find(|x| *x >= down).map(|x| (x - down) / 1000);
-    let (_, _, max_gap, _) = intervals(&t.w, obs, down.saturating_sub(10 * MIN), down + 2 * HOUR);
-    t.w.checks.info(&format!("ASERT ÷{factor}: first block after the collapse, longest gap"), &format!("first block {} s after the step (expected ≈ {} s), longest gap {} s", first_after.unwrap_or(0), factor * 30, max_gap / 1000));
-    interval_check(&mut t.w, obs, down + 2 * HOUR + 30 * MIN + 30 * MIN, end, 22 * SEC, 38 * SEC, "liveness: steady again after the steps");
+    let (_, _, max_gap, _) = intervals(&t.w, obs, down.saturating_sub(10 * MIN), down + low);
+    t.w.checks.info(
+        &format!("ASERT ÷{factor}: first block after the collapse, longest gap"),
+        &format!("first block {} s after the step (exponential, mean {} s: P(> 1 h) = e^(−3600/{})), longest gap {} s", first_after.unwrap_or(0), factor * 30, factor * 30, max_gap / 1000),
+    );
+    interval_check(&mut t.w, obs, down + low + 30 * MIN, end, 22 * SEC, 38 * SEC, "liveness: steady again after the steps");
     finish(&mut t.w, 5 * MIN);
     done(t.w, name, t0)
 }
