@@ -24,6 +24,11 @@ on:
 permissions:
   contents: read
 
+# a newer push supersedes a running gate of the same ref
+concurrency:
+  group: chain-gate-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   gate:
     runs-on: ubuntu-24.04
