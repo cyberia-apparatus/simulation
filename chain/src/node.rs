@@ -115,6 +115,9 @@ pub struct SimNode {
     pub deaf: bool,
     /// the highest header height learned from others
     pub foreign_best: u64,
+    /// gossip messages already delivered (iroh-gossip delivers a message to the
+    /// application once; its message cache drops repeats): hash → virtual ms
+    seen_gossip: BTreeMap<u64, u64>,
     /// blocks this node serves that its kernel never accepted (forged by an attacker)
     pub forged: BTreeMap<Id, (Header, Vec<u8>)>,
     pub skew_s: i64,
@@ -160,6 +163,7 @@ impl SimNode {
             deaf: false,
             foreign_best: 0,
             forged: BTreeMap::new(),
+            seen_gossip: BTreeMap::new(),
             skew_s: 0,
             role: Role::Honest,
             private: BTreeSet::new(),
@@ -480,6 +484,22 @@ impl SimNode {
     }
 
     fn on_gossip(&mut self, from: usize, bytes: &[u8]) {
+        // iroh-gossip's message cache: a repeat of a delivered message never
+        // reaches the application (a fixed-key SipHash, deterministic)
+        let key = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            bytes.hash(&mut h);
+            h.finish()
+        };
+        if self.seen_gossip.contains_key(&key) {
+            return;
+        }
+        if self.seen_gossip.len() > 65_536 {
+            let floor = self.now_ms.saturating_sub(30 * 60_000);
+            self.seen_gossip.retain(|_, t| *t >= floor);
+        }
+        self.seen_gossip.insert(key, self.now_ms);
         match self.decode_gossip(from, bytes) {
             Some(Frame::HeaderGossip(h)) => self.on_header(from, h),
             Some(Frame::Tx(tx)) => self.on_tx(from, tx),
