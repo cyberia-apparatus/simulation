@@ -198,7 +198,8 @@ pub fn analyze(w: &mut World, accounts: &[Account], positions: &[Position], leng
         let one = total(&paid_to("sybil-one"));
         let split = total(&paid_to("sybil-split"));
         let n = positions.iter().filter(|p| p.label.starts_with("sybil-split")).count() as u64;
-        w.checks.expect("economy §9: Sybil splitting changes no total", one.abs_diff(split) <= n + 1, format!("one key {one}, split over {n} keys {split}"));
+        let vacuous = if one == 0 && split == 0 { " — vacuous: neither side earned" } else { "" };
+        w.checks.expect("economy §9: Sybil splitting changes no total", one.abs_diff(split) <= n + 1 && !(one == 0 && split == 0), format!("one key {one}, split over {n} keys {split}{vacuous}"));
     }
     // ring: paid at most 1 % of its stake per settlement (cap) — covered above; report
     if positions.iter().any(|p| p.label.starts_with("ring")) {

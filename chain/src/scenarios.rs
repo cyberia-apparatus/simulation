@@ -739,10 +739,11 @@ fn economy(ctx: &Ctx, name: &str, epochs: u64, t0: Instant) -> Run {
     // hedger: +1 and −1 of equal size on one axon from two keys
     pos.push(mk("hedge+", 41, 3, 1, 1, big, 2));
     pos.push(mk("hedge-", 42, 3, 1, -1, big, 2));
-    // Sybil: one key vs the same stake over 8 keys, same axon side, same epoch
-    pos.push(mk("sybil-one", 43, 4, 5, 1, big, 3));
+    // Sybil: one key vs the same stake over 8 keys, same axon side, same epoch,
+    // on the dominant edge (where +1 earns, so linearity is tested, not vacuous)
+    pos.push(mk("sybil-one", 43, 1, 2, 1, big, 3));
     for k in 0..8 {
-        pos.push(mk(&format!("sybil-split{k}"), 44 + k, 4, 5, 1, big / 8, 3));
+        pos.push(mk(&format!("sybil-split{k}"), 44 + k, 1, 2, 1, big / 8, 3));
     }
     // a self-linking ring on fresh particles
     for k in 0..4u64 {
