@@ -734,7 +734,8 @@ impl SimNode {
                     }
                 }
                 if !sync && got.is_empty() {
-                    self.charge(from, 1, "announced a header it cannot serve");
+                    // the announcer relayed before its own body arrived (gossip::fetch_body): sync takes over
+                    self.sync_pass(Some(from));
                 }
                 if sync {
                     for (h, header, body) in got {

@@ -64,6 +64,8 @@ pub struct Traffic {
     pub refused: u64,
     pub label: String,
     pub stop_at: u64,
+    /// the share of submitted transactions that must be mined, percent
+    pub min_share: u64,
 }
 
 impl Agent for Traffic {
@@ -123,7 +125,7 @@ impl Agent for Traffic {
         let ev = format!("{mined}/{sent} mined ({share} %), wait p50 {} s, p90 {} s, max {} s; {} refused at submit", pct(50), pct(90), pct(100), self.refused);
         w.metrics.emit(serde_json::json!({"kind": "traffic", "label": self.label, "sent": sent, "mined": mined, "p50_s": pct(50), "p90_s": pct(90), "max_s": pct(100)}));
         let inv = format!("{}: honest txs mined", self.label);
-        w.checks.expect(&inv, sent == 0 || share >= 90, ev);
+        w.checks.expect(&inv, sent == 0 || share >= self.min_share, format!("{ev} (bound ≥ {} %)", self.min_share));
     }
 }
 

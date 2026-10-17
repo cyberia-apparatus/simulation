@@ -157,6 +157,7 @@ fn traffic(t: &TestNet, every_ms: u64, stop_at: u64, label: &str, seed: u64) -> 
         refused: 0,
         label: label.into(),
         stop_at,
+        min_share: 90,
     })
 }
 
@@ -336,7 +337,11 @@ fn determinism(ctx: &Ctx, t0: Instant) -> Run {
 
 fn partition(ctx: &Ctx, name: &str, len: u64, t0: Instant) -> Run {
     let mut t = testnet(ctx, name, NetSpec { nodes: 10, degree: 3, ..Default::default() });
-    let tr = traffic(&t, 6 * SEC, len + 2 * HOUR, "traffic", ctx.seed ^ 1);
+    let mut tr = traffic(&t, 6 * SEC, len + 2 * HOUR, "traffic", ctx.seed ^ 1);
+    if len > HOUR {
+        // the minority's pending transactions die with its stores at the operator resync
+        tr.min_share = 60;
+    }
     t.w.add_agent(10 * SEC, tr);
     // majority: nodes 0, 2, 4–7 (miners m0 40 %, m2, m4 → 70 %); minority: 1, 3, 8, 9 (m1, m3 → 30 %)
     let a = vec![0, 2, 4, 5, 6, 7];
@@ -344,7 +349,13 @@ fn partition(ctx: &Ctx, name: &str, len: u64, t0: Instant) -> Run {
     let start = 30 * MIN;
     let long = len > HOUR;
     let (aa, bb) = (a.clone(), b.clone());
-    t.w.at(start, move |w| w.partition(&[aa, bb]));
+    t.w.at(start, move |w| {
+        w.partition(&[aa, bb.clone()]);
+        if long {
+            // two chains that will not rejoin (chain.md §5.2): the minority is measured apart
+            w.expect_split = bb;
+        }
+    });
     let bb = b.clone();
     t.w.at(start + len, move |w| {
         w.heal();

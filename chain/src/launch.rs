@@ -145,7 +145,7 @@ pub fn run(ctx: &Ctx, chain: &str, t0: Instant) -> Run {
     w.add_agent(55 * MIN, Box::new(Stakers { accounts: accounts.clone(), positions: positions.clone(), node: ids[0], length: 240, min_lock: soft3::chain::params::MIN_LOCK, log: vec![] }));
     w.add_agent(
         70 * MIN,
-        Box::new(Traffic { accounts: accounts[..3].to_vec(), nodes: early.to_vec(), every_ms: 20 * SEC, fee_bonus: 0, rng: Rng::new(ctx.seed ^ 3), sent: Default::default(), refused: 0, label: "traffic from matured coinbases".into(), stop_at: 12 * HOUR }),
+        Box::new(Traffic { accounts: accounts[..3].to_vec(), nodes: early.to_vec(), every_ms: 20 * SEC, fee_bonus: 0, rng: Rng::new(ctx.seed ^ 3), sent: Default::default(), refused: 0, label: "traffic from matured coinbases".into(), stop_at: 12 * HOUR, min_share: 90 }),
     );
     w.stall_ms = 40 * MIN;
     let target_height = EpochClock::SPEC.settle(2) + 10;
