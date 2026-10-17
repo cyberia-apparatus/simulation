@@ -7,14 +7,39 @@ license = "LicenseRef-CYBER"
 repository = "https://github.com/cyberia-to/simulation"
 keywords = ["emergence", "cybergraph", "simulation", "scaling"]
 
+[features]
+# `simulation chain …`: the network + economy simulator of the phase-1 chain
+# (crate `simulation-chain` in chain/, which also has its own binary for
+# machines where acpu does not build)
+default = ["chain"]
+chain = ["dep:simulation-chain"]
+
 [dependencies]
+simulation-chain = { path = "chain", optional = true }
 # the hot kernels run on honeycrisp where a NEON/AMX op exists; the
 # trait keeps a scalar fallback so the science runs on any machine.
 acpu = { path = "../honeycrisp/acpu" }
 
+[workspace]
+members = ["chain"]
+# task checkouts live under .worktrees/ (~/cyber/CLAUDE.md); never members
+exclude = [".worktrees"]
+
 [profile.release]
 lto = true
 codegen-units = 1
+
+# the chain simulator: optimized, without the whole-program LTO the
+# emergence kernels want (soft3 and its siblings are large)
+[profile.sim]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+
+# hemera is the proof of work: debug builds of the simulator still hash fast
+[profile.dev.package.cyber-hemera]
+opt-level = 3
 
 [[example]]
 name = "bench_kernels"
