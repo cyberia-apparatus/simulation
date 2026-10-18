@@ -49,7 +49,8 @@ fn parse_args() -> Config {
         kernels: "scalar".into(),
     };
     let args: Vec<String> = std::env::args().collect();
-    let mut i = 1;
+    // `simulation emergence --flags…` and the historical `simulation --flags…`
+    let mut i = if args.get(1).map(String::as_str) == Some("emergence") { 2 } else { 1 };
     while i < args.len() {
         let take = |i: &mut usize| -> String {
             *i += 1;
@@ -138,6 +139,14 @@ fn hidden_target(g: &Graph, s: u32, q: f64, rng: &mut Rng) -> u32 {
 }
 
 fn main() {
+    // `simulation chain …`: the network + economy simulator of the phase-1 chain
+    #[cfg(feature = "chain")]
+    {
+        let args: Vec<String> = std::env::args().collect();
+        if args.get(1).map(String::as_str) == Some("chain") {
+            std::process::exit(simulation_chain::cli(&args[2..]));
+        }
+    }
     let cfg = parse_args();
     let mut rng = Rng::new(cfg.seed);
     let mut g = Graph::new(cfg.nodes + 16);

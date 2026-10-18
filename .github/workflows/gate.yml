@@ -1,0 +1,75 @@
+# The chain simulator's gate suite on Linux: on every push and pull request
+# here, on every soft3 merge (repository_dispatch `soft3-merged`, sent by
+# soft3's notify-simulation workflow), every six hours against soft3 main,
+# and by hand. No actions, no Node: git, python3 (stdlib) and cargo only.
+name: chain gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  repository_dispatch:
+    types: [soft3-merged]
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      soft3:
+        description: soft3 revision (default main)
+        default: main
+      seed:
+        description: seed
+        default: '1'
+
+permissions:
+  contents: read
+
+# a newer push supersedes a running gate of the same ref
+concurrency:
+  group: chain-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CARGO_TERM_COLOR: never
+      SOFT3_REV: ${{ github.event.inputs.soft3 || github.event.client_payload.sha || 'main' }}
+      SEED: ${{ github.event.inputs.seed || '1' }}
+    steps:
+      - name: checkout (git only)
+        run: |
+          mkdir -p "$RUNNER_TEMP/stand"
+          git clone --quiet --no-checkout "https://github.com/${GITHUB_REPOSITORY}.git" "$RUNNER_TEMP/stand/simulation"
+          cd "$RUNNER_TEMP/stand/simulation"
+          git fetch --quiet --depth 1 origin "$GITHUB_SHA" || git fetch --quiet origin "$GITHUB_REF"
+          git checkout --quiet --detach FETCH_HEAD
+      - name: stand (soft3 and its sibling revisions, stand.toml)
+        run: python3 "$RUNNER_TEMP/stand/simulation/scripts/stand.py" --into "$RUNNER_TEMP/stand" --soft3 "$SOFT3_REV" | tee "$RUNNER_TEMP/stand.txt"
+      - name: build
+        working-directory: ${{ runner.temp }}/stand/simulation
+        run: |
+          rustup show active-toolchain
+          cargo build --profile sim -p simulation-chain
+      - name: unit tests
+        working-directory: ${{ runner.temp }}/stand/simulation
+        run: cargo test --profile sim -p simulation-chain
+      - name: gate suite
+        working-directory: ${{ runner.temp }}/stand/simulation
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/out"
+          ./target/sim/simulation-chain gate --seed "$SEED" --out "$RUNNER_TEMP/out" --md "$RUNNER_TEMP/out/verdict.md" --budget 1500
+      - name: verdict
+        if: always()
+        run: |
+          {
+            echo "## chain gate — soft3 $SOFT3_REV, seed $SEED"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/stand.txt" 2>/dev/null
+            echo '```'
+            echo
+            cat "$RUNNER_TEMP/out/verdict.md" 2>/dev/null || echo "no verdict (build failed)"
+          } >> "$GITHUB_STEP_SUMMARY"

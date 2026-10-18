@@ -1,0 +1,30 @@
+[package]
+name = "simulation-chain"
+version = "0.1.0"
+edition = "2021"
+description = "network + economy simulator of the cyber phase-1 chain: N in-process nodes on the real soft3 kernel, a simulated network, adversaries, invariants"
+license = "LicenseRef-CYBER"
+repository = "https://github.com/cyberia-to/simulation"
+
+[lib]
+name = "simulation_chain"
+path = "src/lib.rs"
+
+[[bin]]
+name = "simulation-chain"
+path = "src/main.rs"
+
+[features]
+default = []
+# real-difficulty grinding on the Apple GPU for the launch suite (macOS)
+metal = ["soft3/metal"]
+
+[dependencies]
+# the real kernel: consensus, store, wire codecs, mempool, economy (tracks soft3 main)
+soft3 = { path = "../../soft3/crate", default-features = false, features = ["sim"] }
+mudra = { package = "cyber-mudra", version = "0.1.0", path = "../../mudra", default-features = false, features = ["bridge"] }
+hemera = { package = "cyber-hemera", version = "0.4", path = "../../hemera/rs" }
+tru = { package = "cyber-tru", version = "0.1", path = "../../tru/rs" }
+serde_json = "1"
+# the kernel adapter's tip events are a tokio broadcast channel (no runtime needed)
+tokio = { version = "1", default-features = false, features = ["sync"] }
