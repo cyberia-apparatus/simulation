@@ -113,6 +113,8 @@ pub struct SimNode {
     next_req: u64,
     recent: BTreeMap<Id, u64>,
     pub checkpoints: BTreeMap<u64, Checkpoint>,
+    /// sends `k` on every new connection (soft3#239); `false` = soft3 main before it
+    pub fetch_checkpoints: bool,
     /// ignores everything it is sent but requests (a private-fork miner hiding)
     pub deaf: bool,
     /// the highest header height learned from others
@@ -162,6 +164,7 @@ impl SimNode {
             next_req: 1,
             recent: BTreeMap::new(),
             checkpoints: BTreeMap::new(),
+            fetch_checkpoints: true,
             deaf: false,
             foreign_best: 0,
             forged: BTreeMap::new(),
@@ -282,7 +285,13 @@ impl SimNode {
         if self.banned.get(&peer).is_some_and(|until| *until > self.now_ms) {
             return;
         }
+        let new = !self.peers.contains_key(&peer);
         self.peers.entry(peer).or_default();
+        // chain-wire §3.1 step 1 (soft3#239): a new connection brings the peer's checkpoints
+        if new && self.fetch_checkpoints && self.online {
+            let from_height = self.checkpoints.keys().next_back().map(|h| h + 1).unwrap_or(0);
+            self.request(peer, Frame::GetCheckpoints { from_height }, Pending::Checkpoints);
+        }
     }
 
     pub fn disconnected(&mut self, peer: usize) {
@@ -949,12 +958,6 @@ impl SimNode {
         }
     }
 
-    pub fn ask_checkpoints(&mut self) {
-        let peers: Vec<usize> = self.peers.keys().copied().collect();
-        for p in peers {
-            self.request(p, Frame::GetCheckpoints { from_height: 0 }, Pending::Checkpoints);
-        }
-    }
 
     /// Main-chain ids `[from, to]` (for safety comparisons).
     pub fn main_ids(&self, from: u64, to: u64) -> Vec<Id> {

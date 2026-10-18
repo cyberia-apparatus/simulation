@@ -45,7 +45,7 @@ pub const GATE: &[&str] = &[
 ];
 
 pub const NIGHTLY: &[&str] = &[
-    "steady-large", "partition-long", "asert-100x", "selfish-40", "reorg-140-checkpoints", "eclipse-long", "forged-header-storm", "flood-long", "economy-long",
+    "steady-large", "partition-long", "asert-100x", "selfish-40", "reorg-140-checkpoints", "reorg-140-checkpoints-unfetched", "eclipse-long", "forged-header-storm", "flood-long", "economy-long",
     "settle-slow-one",
 ];
 
@@ -279,6 +279,7 @@ pub fn run(name: &str, ctx: &Ctx) -> Run {
         "reorg-60" => reorg(ctx, name, 60, false, t0),
         "reorg-140" => reorg(ctx, name, 140, false, t0),
         "reorg-140-checkpoints" => reorg(ctx, name, 140, true, t0),
+        "reorg-140-checkpoints-unfetched" => reorg(ctx, name, 140, true, t0),
         "eclipse" => eclipse(ctx, name, 40 * MIN, 30 * MIN, t0),
         "eclipse-long" => eclipse(ctx, name, 40 * MIN, 2 * HOUR + 30 * MIN, t0),
         "flood" => flood(ctx, name, 10 * MIN, t0),
@@ -309,9 +310,11 @@ fn steady(ctx: &Ctx, name: &str, nodes: usize, dur: u64, t0: Instant) -> Run {
     interval_check(&mut t.w, obs, 10 * MIN, dur, 24 * SEC, 36 * SEC, "liveness: mean block interval 30 s ± 20 %");
     let (stale, found) = stale_rate(&t.w, obs);
     t.w.checks.expect("stale blocks ≤ 5 %", stale * 20 <= found, format!("{stale} of {found} found blocks off the main chain"));
-    let cps = t.w.nodes[obs].checkpoints.len();
-    t.w.checks.expect("checkpoints reach every node", t.w.honest_online().iter().all(|n| t.w.nodes[*n].checkpoints.len() == cps) && cps > 0, format!("{cps} checkpoints held by node {obs}"));
     finish(&mut t.w, 5 * MIN);
+    // after the quiesce: a checkpoint signed in the last minutes has had time to spread
+    let cps = t.w.nodes[obs].checkpoints.len();
+    let short: Vec<String> = t.w.honest_online().iter().filter(|n| t.w.nodes[**n].checkpoints.len() != cps).map(|n| format!("{} holds {}", t.w.nodes[*n].name, t.w.nodes[*n].checkpoints.len())).collect();
+    t.w.checks.expect("checkpoints reach every node", short.is_empty() && cps > 0, format!("{cps} checkpoints held by node {obs}{}", if short.is_empty() { String::new() } else { format!("; {}", short.join(", ")) }));
     done(t.w, name, t0)
 }
 
@@ -541,6 +544,8 @@ fn reorg(ctx: &Ctx, name: &str, depth: u64, checkpoints: bool, t0: Instant) -> R
     if !checkpoints {
         t.w.signer = None;
     }
+    // soft3 main before #239: a node never asked a peer for its checkpoints
+    t.w.fetch_checkpoints = !name.ends_with("-unfetched");
     let rate = t.base_rate * 3 / 2; // 60 % of the total once it starts
     let start = 40 * MIN;
     t.w.at(start, move |w| {
@@ -576,7 +581,10 @@ fn reorg(ctx: &Ctx, name: &str, depth: u64, checkpoints: bool, t0: Instant) -> R
         let late_tip = t.w.nodes[late].tip();
         let follows_attacker = t.w.nodes[atk].chain().height_of(&late_tip.id).is_some() && t.w.nodes[0].chain().height_of(&late_tip.id).is_none();
         let ev = format!("late joiner at {} follows the {} chain; checkpoints {}", late_tip.height, if follows_attacker { "attacker's" } else { "honest" }, if checkpoints { "on" } else { "off" });
-        if checkpoints {
+        if checkpoints && !t.w.fetch_checkpoints {
+            t.w.checks.expected_red.push("late joiner rejects a deep rewrite (checkpoints never fetched)".into());
+            t.w.checks.expect("late joiner rejects a deep rewrite (checkpoints never fetched)", !follows_attacker, ev);
+        } else if checkpoints {
             t.w.checks.expect("late joiner rejects a deep rewrite (checkpoints on)", !follows_attacker, ev);
         } else {
             t.w.checks.info("late joiner after a refused deep rewrite (checkpoints off)", &ev);

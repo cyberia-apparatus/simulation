@@ -107,6 +107,9 @@ pub struct World {
     pub allow_honest_bans: bool,
     /// the hostile nodes of the run (their bans are the point)
     pub hostile_ix: Vec<usize>,
+    /// nodes ask every new peer for its checkpoints (chain-wire §3 `k`); soft3
+    /// main before #239 never sent `k` — `false` reproduces that
+    pub fetch_checkpoints: bool,
     /// grinds a valid nonce for real difficulty (the launch suite); `None` = the scalar loop
     pub grinder: Option<Box<dyn Fn(&mut Header) -> u64>>,
 }
@@ -143,6 +146,7 @@ impl World {
             allow_honest_bans: false,
             hostile_ix: Vec::new(),
             grinder: None,
+            fetch_checkpoints: true,
         }
     }
 
@@ -189,6 +193,9 @@ impl World {
                 return;
             }
         }
+        for n in self.nodes.iter_mut() {
+            n.fetch_checkpoints = self.fetch_checkpoints;
+        }
         for p in self.net.neighbors(ix) {
             if self.nodes[p].online {
                 self.nodes[ix].connected(p);
@@ -197,8 +204,10 @@ impl World {
         }
         let jitter = self.rng.below(TICK_MS);
         self.push(self.now + jitter, Ev::Tick(ix));
-        self.nodes[ix].ask_checkpoints();
         self.nodes[ix].sync_pass(None);
+        for p in self.net.neighbors(ix) {
+            self.flush(p);
+        }
         self.flush(ix);
         self.reschedule_node(ix);
     }
@@ -215,6 +224,8 @@ impl World {
         if self.nodes[a].online && self.nodes[b].online {
             self.nodes[a].connected(b);
             self.nodes[b].connected(a);
+            self.flush(a);
+            self.flush(b);
         }
     }
 
@@ -365,6 +376,8 @@ impl World {
         self.found.insert(id, (self.now, m));
         let publish = match &mut self.miners[m].strategy {
             Strategy::Honest => true,
+            // once released, the rewrite keeps growing in public (heavier than the honest chain)
+            Strategy::Private { released: true, .. } => true,
             Strategy::Selfish { .. } | Strategy::Private { .. } => false,
         };
         if publish {
