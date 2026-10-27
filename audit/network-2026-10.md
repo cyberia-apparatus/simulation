@@ -116,7 +116,7 @@ checkpoints-on-connect, 1 mine e2e).
 
 ## open findings, reproduced (expected red)
 
-The economy's known findings (`soft3/audit/chain/economy-2026-10-17.md`
+The economy's known findings (`cybernode/audit/chain/economy-2026-10-17.md`
 § findings), run as expected-red rows here and as failing kernel tests in
 draft [soft3#234](https://github.com/cyberia-to/soft3/pull/234) — not
 fixed: attribution and the record are the economy's decisions.
