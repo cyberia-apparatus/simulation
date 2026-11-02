@@ -118,7 +118,12 @@ pub fn testnet(ctx: &Ctx, scenario: &str, spec: NetSpec) -> TestNet {
     let cfg = Arc::new(Config {
         genesis: Arc::new(tg.genesis.bytes.clone()),
         chain_id: tg.genesis.chain_id,
-        opts: OpenOptions { checkpoints: true, clock: spec.clock, engine: Some(engine), quadrature: 0, inline_settlement: false },
+        opts: OpenOptions {
+            checkpoints: true,
+            clock: spec.clock,
+            engine: Some(engine),
+            ..Default::default()
+        },
         clock: spec.clock.unwrap_or(EpochClock::SPEC),
         supply0: tg.genesis.s0(),
         subsidy: tg.genesis.subsidy(),

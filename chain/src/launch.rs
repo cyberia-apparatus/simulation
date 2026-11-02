@@ -85,7 +85,12 @@ pub fn run(ctx: &Ctx, chain: &str, t0: Instant) -> Run {
     let cfg = Arc::new(Config {
         genesis: Arc::new(genesis.bytes.clone()),
         chain_id: genesis.chain_id,
-        opts: OpenOptions { checkpoints: true, clock: None, engine: Some(Arc::new(Tru::new(4))), quadrature: 0, inline_settlement: false },
+        opts: OpenOptions {
+            checkpoints: true,
+            clock: None,
+            engine: Some(Arc::new(Tru::new(4))),
+            ..Default::default()
+        },
         clock: EpochClock::SPEC,
         supply0: genesis.s0(),
         subsidy: genesis.subsidy(),
